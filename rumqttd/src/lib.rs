@@ -1,5 +1,6 @@
 use std::fmt;
 use std::net::SocketAddr;
+use std::os::fd::AsRawFd;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::{collections::HashMap, path::Path};
@@ -44,6 +45,7 @@ pub type ClientId = String;
 pub type AuthUser = String;
 pub type AuthPass = String;
 pub type AuthHandler = Arc<dyn Fn(ClientId, AuthUser, AuthPass) -> bool + Send + Sync + 'static>;
+pub type OnConnectHandler = Arc<dyn Fn(&dyn AsRawFd) + Send + Sync + 'static>;
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
 pub struct Config {
@@ -103,13 +105,28 @@ impl TlsConfig {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct ServerSettings {
     pub name: String,
     pub listen: SocketAddr,
     pub tls: Option<TlsConfig>,
     pub next_connection_delay_ms: u64,
     pub connections: ConnectionSettings,
+    #[serde(skip)]
+    pub on_new_connection: Option<OnConnectHandler>,
+}
+
+impl fmt::Debug for ServerSettings {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ServerSettings")
+            .field("name", &self.name)
+            .field("listen", &self.listen)
+            .field("tls", &self.tls)
+            .field("next_connection_delay_ms", &self.next_connection_delay_ms)
+            .field("connections", &self.connections)
+            .field("on_new_connection", &self.on_new_connection.is_some())
+            .finish()
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

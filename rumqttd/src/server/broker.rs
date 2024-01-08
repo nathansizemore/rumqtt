@@ -382,7 +382,6 @@ impl<P: Protocol + Clone + Send + 'static> Server<P> {
         let delay = Duration::from_millis(self.config.next_connection_delay_ms);
         let mut count: usize = 0;
 
-        let config = Arc::new(self.config.connections.clone());
         info!(
             config = self.config.name,
             listen_addr = self.config.listen.to_string(),
@@ -398,6 +397,10 @@ impl<P: Protocol + Clone + Send + 'static> Server<P> {
                 }
             };
 
+            if let Some(ref on_connect) = self.config.on_new_connection {
+                on_connect(&stream);
+            }
+
             let (network, tenant_id) = match self.tls_accept(stream).await {
                 Ok(o) => o,
                 Err(e) => {
@@ -410,11 +413,11 @@ impl<P: Protocol + Clone + Send + 'static> Server<P> {
                 name=?self.config.name, ?addr, count, tenant=?tenant_id, "accept"
             );
 
-            let config = config.clone();
             let router_tx = self.router_tx.clone();
             count += 1;
 
             let protocol = self.protocol.clone();
+            let connection_config = Arc::new(self.config.connections.clone());
             match link_type {
                 #[cfg(feature = "websocket")]
                 LinkType::Websocket => {
@@ -427,7 +430,7 @@ impl<P: Protocol + Clone + Send + 'static> Server<P> {
                     };
                     task::spawn(
                         remote(
-                            config,
+                            connection_config.clone(),
                             tenant_id.clone(),
                             router_tx,
                             stream,
@@ -443,7 +446,7 @@ impl<P: Protocol + Clone + Send + 'static> Server<P> {
                 }
                 LinkType::Remote => task::spawn(
                     remote(
-                        config,
+                        connection_config.clone(),
                         tenant_id.clone(),
                         router_tx,
                         network,
