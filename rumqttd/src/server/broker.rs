@@ -507,7 +507,7 @@ async fn remote<P: Protocol>(
 
     let dynamic_filters = config.dynamic_filters;
 
-    let connect_packet = match mqtt_connect(config, &mut network).await {
+    let connect_packet = match mqtt_connect(config.clone(), &mut network).await {
         Ok(p) => p,
         Err(e) => {
             error!(error=?e, "Error while handling MQTT connect packet");
@@ -523,10 +523,14 @@ async fn remote<P: Protocol>(
     };
 
     if let Some(tenant_id) = &tenant_id {
+        let actual = client_id.clone();
         // client_id is set to "tenant_id.client_id"
         // this is to make sure we are consistent,
         // as Connection uses this format of client_id
         client_id = format!("{tenant_id}.{client_id}");
+        if let Some(ref on_client_id_aliased) = config.on_client_id_aliased {
+            on_client_id_aliased(actual.clone(), client_id.clone());
+        }
     }
 
     if let Some(sender) = will_handlers.lock().unwrap().remove(&client_id) {
