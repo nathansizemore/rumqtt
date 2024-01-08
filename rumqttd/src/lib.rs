@@ -44,6 +44,7 @@ pub type ClientId = String;
 pub type AuthUser = String;
 pub type AuthPass = String;
 pub type AuthHandler = Arc<dyn Fn(ClientId, AuthUser, AuthPass) -> bool + Send + Sync + 'static>;
+pub type OnClientIdAliased = Arc<dyn Fn(ClientId, ClientId) + Send + Sync + 'static>;
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
 pub struct Config {
@@ -135,6 +136,8 @@ pub struct ConnectionSettings {
     pub external_auth: Option<AuthHandler>,
     #[serde(default)]
     pub dynamic_filters: bool,
+    #[serde(skip)]
+    pub on_client_id_aliased: Option<OnClientIdAliased>,
 }
 
 impl fmt::Debug for ConnectionSettings {
@@ -146,6 +149,7 @@ impl fmt::Debug for ConnectionSettings {
             .field("auth", &self.auth)
             .field("external_auth", &self.external_auth.is_some())
             .field("dynamic_filters", &self.dynamic_filters)
+            .field("on_client_id_aliased", &self.on_client_id_aliased.is_some())
             .finish()
     }
 }
