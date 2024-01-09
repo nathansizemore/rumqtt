@@ -1,6 +1,6 @@
 use std::fmt;
 use std::net::SocketAddr;
-use std::os::fd::AsRawFd;
+use std::os::fd::{AsRawFd, RawFd};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::{collections::HashMap, path::Path};
@@ -45,8 +45,10 @@ pub type ClientId = String;
 pub type AuthUser = String;
 pub type AuthPass = String;
 pub type AuthHandler = Arc<dyn Fn(ClientId, AuthUser, AuthPass) -> bool + Send + Sync + 'static>;
-pub type OnConnectHandler = Arc<dyn Fn(&dyn AsRawFd) + Send + Sync + 'static>;
+pub type OnConnectionAccepted = Arc<dyn Fn(&dyn AsRawFd) + Send + Sync + 'static>;
 pub type OnClientIdAliased = Arc<dyn Fn(ClientId, ClientId) + Send + Sync + 'static>;
+pub type OnClientConnected = Arc<dyn Fn(RawFd, ClientId) + Send + Sync + 'static>;
+pub type OnClientDisconnected = Arc<dyn Fn(RawFd, ClientId) + Send + Sync + 'static>;
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
 pub struct Config {
@@ -114,7 +116,7 @@ pub struct ServerSettings {
     pub next_connection_delay_ms: u64,
     pub connections: ConnectionSettings,
     #[serde(skip)]
-    pub on_new_connection: Option<OnConnectHandler>,
+    pub on_new_connection: Option<OnConnectionAccepted>,
 }
 
 impl fmt::Debug for ServerSettings {
@@ -155,6 +157,10 @@ pub struct ConnectionSettings {
     pub dynamic_filters: bool,
     #[serde(skip)]
     pub on_client_id_aliased: Option<OnClientIdAliased>,
+    #[serde(skip)]
+    pub on_client_connected: Option<OnClientConnected>,
+    #[serde(skip)]
+    pub on_client_disconnected: Option<OnClientDisconnected>,
 }
 
 impl fmt::Debug for ConnectionSettings {
@@ -167,6 +173,11 @@ impl fmt::Debug for ConnectionSettings {
             .field("external_auth", &self.external_auth.is_some())
             .field("dynamic_filters", &self.dynamic_filters)
             .field("on_client_id_aliased", &self.on_client_id_aliased.is_some())
+            .field("on_client_connected", &self.on_client_connected.is_some())
+            .field(
+                "on_client_disconnected",
+                &self.on_client_disconnected.is_some(),
+            )
             .finish()
     }
 }

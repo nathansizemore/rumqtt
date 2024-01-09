@@ -13,6 +13,7 @@ use crate::{meters, ConnectionSettings, Meter};
 use flume::{RecvError, SendError, Sender};
 use std::collections::HashMap;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use std::os::fd::{AsRawFd, RawFd};
 use std::sync::{Arc, Mutex};
 use tracing::{error, field, info, warn, Instrument};
 
@@ -401,6 +402,7 @@ impl<P: Protocol + Clone + Send + 'static> Server<P> {
                 on_connect(&stream);
             }
 
+            let fd = stream.as_raw_fd();
             let (network, tenant_id) = match self.tls_accept(stream).await {
                 Ok(o) => o,
                 Err(e) => {
@@ -436,6 +438,7 @@ impl<P: Protocol + Clone + Send + 'static> Server<P> {
                             stream,
                             protocol,
                             self.awaiting_will_handler.clone(),
+                            fd,
                         )
                         .instrument(tracing::info_span!(
                             "websocket_link",
@@ -452,8 +455,9 @@ impl<P: Protocol + Clone + Send + 'static> Server<P> {
                         network,
                         protocol,
                         self.awaiting_will_handler.clone(),
+                        fd,
                     )
-                    .instrument(tracing::error_span!(
+                    .instrument(tracing::info_span!(
                         "remote_link",
                         ?tenant_id,
                         client_id = field::Empty,
@@ -497,6 +501,7 @@ async fn remote<P: Protocol>(
     stream: Box<dyn N>,
     protocol: P,
     will_handlers: Arc<Mutex<HashMap<String, Sender<AwaitingWill>>>>,
+    fd: RawFd,
 ) {
     let mut network = Network::new(
         stream,
@@ -569,6 +574,10 @@ async fn remote<P: Protocol>(
     let will_delay_interval = link.will_delay_interval;
     let mut send_disconnect = true;
 
+    if let Some(ref on_client_connected) = config.on_client_connected {
+        on_client_connected(fd, client_id.clone());
+    }
+
     match link.start().await {
         // Connection got closed. This shouldn't usually happen.
         Ok(_) => error!("connection-stop"),
@@ -598,6 +607,10 @@ async fn remote<P: Protocol>(
 
     // this is important to stop the connection
     drop(link);
+
+    if let Some(ref on_client_disconnected) = config.on_client_disconnected {
+        on_client_disconnected(fd, client_id.clone());
+    }
 
     let publish_will = match tokio::time::timeout(
         Duration::from_secs(will_delay_interval as u64),
