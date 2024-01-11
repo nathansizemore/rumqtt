@@ -47,7 +47,8 @@ pub type AuthPass = String;
 pub type AuthHandler = Arc<dyn Fn(ClientId, AuthUser, AuthPass) -> bool + Send + Sync + 'static>;
 pub type OnConnectionAccepted = Arc<dyn Fn(&dyn AsRawFd) + Send + Sync + 'static>;
 pub type OnClientIdAliased = Arc<dyn Fn(ClientId, ClientId) + Send + Sync + 'static>;
-pub type OnClientConnected = Arc<dyn Fn(RawFd, ClientId) + Send + Sync + 'static>;
+pub type OnClientConnected =
+    Arc<dyn Fn(RawFd, ClientId, tokio::sync::mpsc::Sender<bool>) + Send + Sync + 'static>;
 pub type OnClientDisconnected = Arc<dyn Fn(RawFd, ClientId) + Send + Sync + 'static>;
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]

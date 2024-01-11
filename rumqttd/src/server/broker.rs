@@ -553,6 +553,20 @@ async fn remote<P: Protocol>(
         .unwrap()
         .insert(client_id.clone(), will_tx);
 
+    // Notify user client is connected before starting link, so it doesn't
+    // need to drop if it fails.
+    if let Some(ref on_client_connected) = config.on_client_connected {
+        let (tx, mut rx) = tokio::sync::mpsc::channel::<bool>(1);
+        on_client_connected(fd, client_id.clone(), tx);
+        let success = rx.recv().await;
+        if let Some(success) = success {
+            if !success {
+                error!("failed to launch dock");
+                return;
+            }
+        }
+    }
+
     // Start the link
     let mut link = match RemoteLink::new(
         router_tx.clone(),
@@ -574,28 +588,24 @@ async fn remote<P: Protocol>(
     let will_delay_interval = link.will_delay_interval;
     let mut send_disconnect = true;
 
-    if let Some(ref on_client_connected) = config.on_client_connected {
-        on_client_connected(fd, client_id.clone());
-    }
-
     match link.start().await {
         // Connection got closed. This shouldn't usually happen.
-        Ok(_) => error!("connection-stop"),
+        Ok(_) => error!(client_id = client_id, "disconnected"),
         // No need to send a disconnect message when disconnection
         // originated internally in the router.
         Err(remote::Error::Link(e)) => {
-            error!(error=?e, "router-drop");
+            error!(error=?e, client_id = client_id, "router-drop");
             send_disconnect = false;
         }
         // Connection was closed by peer
         Err(remote::Error::Network(network::Error::Io(err)) | remote::Error::Io(err))
             if err.kind() == io::ErrorKind::ConnectionAborted =>
         {
-            info!(error=?err, "disconnected");
+            info!(error=?err, client_id = client_id, "disconnected");
         }
         // Any other error
         Err(e) => {
-            error!(error=?e, "disconnected");
+            error!(error=?e, client_id = client_id, "disconnected");
         }
     };
 
