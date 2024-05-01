@@ -44,7 +44,12 @@ pub type Cursor = (u64, u64);
 pub type ClientId = String;
 pub type AuthUser = String;
 pub type AuthPass = String;
-pub type AuthHandler = Arc<dyn Fn(ClientId, AuthUser, AuthPass) -> bool + Send + Sync + 'static>;
+pub type AuthHandler = Arc<
+    dyn Fn(ClientId, AuthUser, AuthPass, tokio::sync::mpsc::Sender<bool>) -> bool
+        + Send
+        + Sync
+        + 'static,
+>;
 pub type OnConnectionAccepted = Arc<dyn Fn(&dyn AsRawFd) + Send + Sync + 'static>;
 pub type OnClientIdAliased = Arc<dyn Fn(ClientId, ClientId) + Send + Sync + 'static>;
 pub type OnClientConnected =

@@ -186,7 +186,14 @@ where
         packet => return Err(Error::NotConnectPacket(packet)),
     };
 
-    handle_auth(config.clone(), login.as_ref(), &connect.client_id)?;
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<bool>(1);
+    handle_auth(config.clone(), login.as_ref(), &connect.client_id, tx)?;
+    let success = rx.recv().await;
+    if let Some(success) = success {
+        if !success {
+            return Err(Error::InvalidAuth);
+        }
+    }
 
     // When keep_alive feature is disabled client can live forever, which is not good in
     // distributed broker context so currenlty we don't allow it.
@@ -215,6 +222,7 @@ fn handle_auth(
     config: Arc<ConnectionSettings>,
     login: Option<&Login>,
     client_id: &str,
+    tx: tokio::sync::mpsc::Sender<bool>,
 ) -> Result<(), Error> {
     if config.auth.is_none() && config.external_auth.is_none() {
         return Ok(());
@@ -234,6 +242,7 @@ fn handle_auth(
             client_id.to_owned(),
             username.to_owned(),
             password.to_owned(),
+            tx,
         ) {
             return Err(Error::InvalidAuth);
         }
